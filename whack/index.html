@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>박규봉 잡기</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=DotGothic16&display=swap">
+<style>
+  :root {
+    --hall: #0a0714; --ink: #f4f1ff; --muted: #9a94c2; --panel: rgba(19, 13, 38, 0.92); --line: #3a2f66;
+    --accent: #ffd43b; --accent-dark: #c99a00; --accent-ink: #1b1b2a; --good: #5ee87a; --bad: #ff5c7a;
+    --px: 4px;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; color: var(--ink); background: var(--hall);
+    font-family: "DotGothic16", "Press Start 2P", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, monospace;
+    display: flex; flex-direction: column; align-items: center;
+    padding-inline: 16px; padding-block: 24px; box-sizing: border-box;
+    position: relative; overflow-x: hidden; overflow-y: auto; image-rendering: pixelated;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  body::after { content: ""; position: fixed; inset: 0; z-index: 7; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 4px); }
+  .backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: url("images/bg.png") center top / cover no-repeat var(--hall); image-rendering: pixelated; }
+  .pxbox { --border: var(--line); border: 0;
+    box-shadow: 0 calc(var(--px) * -1) 0 0 var(--border), 0 var(--px) 0 0 var(--border),
+                calc(var(--px) * -1) 0 0 0 var(--border), var(--px) 0 0 0 var(--border); }
+
+  header { position: relative; z-index: 2; width: 100%; max-width: 640px; margin-top: 9vh; padding: 10px 14px; box-sizing: border-box;
+    background: rgba(10, 7, 20, 0.72); box-shadow: 0 0 0 var(--px) rgba(255,255,255,0.08); text-shadow: 2px 2px 0 #000;
+    display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+  h1 { margin: 0; font-family: "Press Start 2P", monospace; font-size: 18px; line-height: 1.4; text-shadow: 3px 3px 0 var(--accent-dark); }
+  h1 small { display: block; font-family: "DotGothic16", monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; text-shadow: none; margin-bottom: 4px; }
+  .stats { display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+  .stat { text-align: right; }
+  .stat .label { font-size: 12px; letter-spacing: 0.15em; color: var(--muted); white-space: nowrap; }
+  .stat .value { font-family: "Press Start 2P", monospace; font-size: 16px; color: var(--accent); margin-top: 4px; }
+  .stat .value.warn { color: var(--bad); }
+  @media (max-width: 480px) {
+    header { margin-top: 2vh; flex-direction: column; align-items: stretch; gap: 10px; }
+    h1 { font-size: 15px; }
+    .stats { justify-content: space-between; }
+    .stat { text-align: center; }
+  }
+
+  /* ---- 무대 가운데 화분: 박규봉이 화분 속에서 올라옴 ---- */
+  .stage { position: relative; z-index: 1; width: 100%; max-width: 540px; margin-top: 3vh; padding-top: calc(var(--sprite-h) * 0.5);
+    display: grid; grid-template-columns: repeat(var(--pots, 3), 1fr); gap: clamp(24px, 5vh, 44px) clamp(24px, 6vw, 60px); align-items: end; justify-items: center; }
+  .slot { position: relative; display: flex; flex-direction: column; align-items: center; }   /* z-index는 줄마다 JS에서 지정: 앞줄이 뒷줄 화분 위에 그려짐 */
+  .hole { width: 100%; height: calc(var(--sprite-h) * (1 - var(--hidden)) * 0.6); clip-path: inset(-300% -100% 0 -100%); display: flex; justify-content: center; align-items: flex-end; margin-bottom: calc(var(--sprite-h) * var(--hidden) * -1); position: relative; z-index: 1; }
+  .sprite { width: var(--sprite-w); aspect-ratio: 7 / 16; transform: translateY(105%); transition: transform .14s steps(3); cursor: pointer; }
+  .sprite img { width: 100%; height: 100%; object-fit: contain; object-position: bottom; display: block; image-rendering: pixelated; filter: drop-shadow(3px 3px 0 #000); pointer-events: none; }
+  .slot.up .sprite { transform: translateY(0); }
+  .slot.hit .sprite { transform: translateY(105%); transition: transform .1s steps(2); }
+  .slot.down .sprite { transition-duration: .1s; }
+
+  :root { --sprite-w: clamp(50px, 12.5vw, 76px); --sprite-h: calc(var(--sprite-w) * 16 / 7); --rim: clamp(8px, 1.8vw, 11px); --hidden: 0.36; }
+  .pot { position: relative; z-index: 2; pointer-events: none; width: 100%; max-width: 92px; display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; }
+  .rim { width: 100%; height: var(--rim); background: #b5542a; box-shadow: inset 0 var(--px) 0 0 #e07a3e, inset 0 calc(var(--px) * -1) 0 0 #7a3416, 4px 4px 0 0 #000; }
+  .body { width: 84%; aspect-ratio: 5 / 4; background: #c9682f; clip-path: polygon(0 0, 100% 0, 86% 100%, 14% 100%);
+    display: grid; place-items: center; background-image: linear-gradient(90deg, transparent 0 76%, #9c4620 76% 100%); }
+  .face { width: 60%; aspect-ratio: 1 / 1; background: #faf2e1; box-shadow: inset 0 0 0 var(--px) #2a2a3a; display: grid; place-items: center; overflow: hidden; }
+  .face img { width: 90%; height: 90%; object-fit: contain; image-rendering: pixelated; }
+  .face svg { width: 100%; height: 100%; shape-rendering: crispEdges; }
+  .pop { position: absolute; left: 50%; top: 10%; transform: translateX(-50%); font-family: "Press Start 2P", monospace; font-size: 14px;
+    color: var(--good); text-shadow: 2px 2px 0 #000; pointer-events: none; animation: rise .6s steps(6) forwards; z-index: 3; }
+  .pop.bad { color: var(--bad); }
+  @keyframes rise { from { opacity: 1; translate: 0 0; } to { opacity: 0; translate: 0 -40px; } }
+  .flash { position: fixed; inset: 0; z-index: 4; pointer-events: none; background: var(--bad); opacity: 0; }
+  .flash.on { animation: blink .18s steps(2); }
+  .toast { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; text-align: center;
+    font-family: "Press Start 2P", monospace; font-size: clamp(22px, 7vw, 48px); color: var(--accent); text-shadow: 4px 4px 0 var(--accent-dark), 8px 8px 0 #000; opacity: 0; }
+  .toast small { display: block; font-family: "DotGothic16", monospace; font-size: clamp(12px, 3vw, 18px); color: var(--ink); text-shadow: 2px 2px 0 #000; margin-top: 12px; letter-spacing: 0.1em; }
+  .toast.on { animation: toast 1.1s steps(8) forwards; }
+  @keyframes toast { 0% { opacity: 0; transform: translate(-50%, -40%) scale(0.7); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 75% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1); } }
+  @keyframes blink { from { opacity: .35; } to { opacity: 0; } }
+
+  /* ---- 패널 ---- */
+  .panel { position: fixed; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 40px)); max-height: 86vh; overflow-y: auto; text-align: center; background: var(--panel); padding: 20px 24px; box-sizing: border-box; }
+  .panel p { margin: 0 0 14px; font-size: 16px; line-height: 1.6; }
+  .panel .sub { font-size: 14px; color: var(--muted); }
+  .legend { display: flex; gap: 20px; justify-content: center; align-items: center; margin: 6px 0 16px; }
+  .legend div { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .legend img { width: 28px; height: 62px; object-fit: contain; image-rendering: pixelated; }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  input[type="text"] { font: inherit; font-size: 16px; padding: 10px 14px; border: var(--px) solid var(--line); background: #0a0714; color: var(--ink); min-width: 0; width: 200px; }
+  input[type="text"]:focus-visible { outline: var(--px) solid var(--accent); outline-offset: 2px; }
+  button.primary { font-family: "Press Start 2P", monospace; font-size: 12px; background: var(--accent); color: var(--accent-ink); border: 0; padding: 14px 22px; cursor: pointer; box-shadow: inset -4px -4px 0 0 var(--accent-dark), 4px 4px 0 0 #000; }
+  button.primary:active { box-shadow: inset 4px 4px 0 0 var(--accent-dark); transform: translate(2px, 2px); }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  button.primary.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 var(--px) var(--line); }
+  button.primary:focus-visible { outline: var(--px) solid var(--ink); outline-offset: 2px; }
+  .countdown { font-family: "Press Start 2P", monospace; font-size: clamp(40px, 12vw, 96px); color: var(--accent); text-shadow: 4px 4px 0 var(--accent-dark), 8px 8px 0 #000; }
+  .result .who { font-size: 14px; color: var(--muted); letter-spacing: 0.1em; }
+  .result .big { font-family: "Press Start 2P", monospace; font-size: clamp(22px, 5vw, 36px); color: var(--accent); text-shadow: 3px 3px 0 var(--accent-dark); margin: 10px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 14px; }
+  th, td { padding: 8px; text-align: left; border-top: 2px dashed var(--line); }
+  th { font-size: 12px; letter-spacing: 0.15em; color: var(--muted); border-top: 0; }
+  td.num { text-align: right; font-family: "Press Start 2P", monospace; font-size: 11px; color: var(--accent); }
+  footer.credit { position: relative; z-index: 1; margin-top: 28px; padding: 10px 14px; text-align: center;
+    font-family: "Press Start 2P", monospace; font-size: 10px; letter-spacing: 0.15em; line-height: 1.8; color: var(--muted); text-shadow: 2px 2px 0 #000; }
+  footer.credit b { color: var(--accent); font-weight: normal; }
+  @media (prefers-reduced-motion: reduce) { .sprite, .pop, .flash { transition: none; animation: none; } .toast.on { animation-duration: .01s; } }
+</style>
+</head>
+<body>
+
+<!-- 스프라이트 정의: 박규봉(가운뎃손가락만 올린 손 + 손잡이), 함정(록 사인 손) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="gyubong" viewBox="0 0 9 16">
+      <rect x="4" y="0" width="1" height="1" fill="#fff2a8"/>
+      <rect x="4" y="1" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="2" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="3" width="1" height="1" fill="#ffd43b"/>
+      <rect x="2" y="4" width="1" height="1" fill="#ffd43b"/>
+      <rect x="3" y="4" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="4" width="1" height="1" fill="#ffd43b"/>
+      <rect x="5" y="4" width="1" height="1" fill="#ffd43b"/>
+      <rect x="6" y="4" width="1" height="1" fill="#ffd43b"/>
+      <rect x="1" y="5" width="1" height="1" fill="#ffd43b"/>
+      <rect x="2" y="5" width="1" height="1" fill="#e0b52a"/>
+      <rect x="3" y="5" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="5" width="1" height="1" fill="#e0b52a"/>
+      <rect x="5" y="5" width="1" height="1" fill="#ffd43b"/>
+      <rect x="6" y="5" width="1" height="1" fill="#e0b52a"/>
+      <rect x="7" y="5" width="1" height="1" fill="#ffd43b"/>
+      <rect x="1" y="6" width="1" height="1" fill="#ffd43b"/>
+      <rect x="2" y="6" width="1" height="1" fill="#ffd43b"/>
+      <rect x="3" y="6" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="6" width="1" height="1" fill="#ffd43b"/>
+      <rect x="5" y="6" width="1" height="1" fill="#ffd43b"/>
+      <rect x="6" y="6" width="1" height="1" fill="#ffd43b"/>
+      <rect x="7" y="6" width="1" height="1" fill="#c99a00"/>
+      <rect x="0" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="1" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="2" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="3" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="5" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="6" y="7" width="1" height="1" fill="#ffd43b"/>
+      <rect x="7" y="7" width="1" height="1" fill="#c99a00"/>
+      <rect x="1" y="8" width="1" height="1" fill="#ffd43b"/>
+      <rect x="2" y="8" width="1" height="1" fill="#ffd43b"/>
+      <rect x="3" y="8" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="8" width="1" height="1" fill="#ffd43b"/>
+      <rect x="5" y="8" width="1" height="1" fill="#ffd43b"/>
+      <rect x="6" y="8" width="1" height="1" fill="#ffd43b"/>
+      <rect x="7" y="8" width="1" height="1" fill="#c99a00"/>
+      <rect x="2" y="9" width="1" height="1" fill="#ffd43b"/>
+      <rect x="3" y="9" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="9" width="1" height="1" fill="#ffd43b"/>
+      <rect x="5" y="9" width="1" height="1" fill="#ffd43b"/>
+      <rect x="6" y="9" width="1" height="1" fill="#c99a00"/>
+      <rect x="3" y="10" width="1" height="1" fill="#ffd43b"/>
+      <rect x="4" y="10" width="1" height="1" fill="#ffd43b"/>
+      <rect x="5" y="10" width="1" height="1" fill="#c99a00"/>
+      <rect x="4" y="11" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="4" y="12" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="4" y="13" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="3" y="14" width="1" height="1" fill="#4a4a66"/>
+      <rect x="4" y="14" width="1" height="1" fill="#4a4a66"/>
+      <rect x="5" y="14" width="1" height="1" fill="#4a4a66"/>
+      <rect x="3" y="15" width="1" height="1" fill="#4a4a66"/>
+      <rect x="4" y="15" width="1" height="1" fill="#4a4a66"/>
+      <rect x="5" y="15" width="1" height="1" fill="#4a4a66"/>
+    </symbol>
+    <symbol id="rock" viewBox="0 0 9 16">
+      <rect x="1" y="0" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="0" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="1" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="1" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="2" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="2" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="3" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="3" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="2" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="4" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="5" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="6" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="4" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="5" width="1" height="1" fill="#2a2148"/>
+      <rect x="2" y="5" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="5" width="1" height="1" fill="#ff5c7a"/>
+      <rect x="4" y="5" width="1" height="1" fill="#2a2148"/>
+      <rect x="5" y="5" width="1" height="1" fill="#ff5c7a"/>
+      <rect x="6" y="5" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="5" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="2" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="4" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="5" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="6" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="6" width="1" height="1" fill="#2a2148"/>
+      <rect x="0" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="2" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="4" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="5" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="6" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="7" width="1" height="1" fill="#2a2148"/>
+      <rect x="1" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="2" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="4" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="5" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="6" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="7" y="8" width="1" height="1" fill="#2a2148"/>
+      <rect x="2" y="9" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="9" width="1" height="1" fill="#2a2148"/>
+      <rect x="4" y="9" width="1" height="1" fill="#2a2148"/>
+      <rect x="5" y="9" width="1" height="1" fill="#2a2148"/>
+      <rect x="6" y="9" width="1" height="1" fill="#2a2148"/>
+      <rect x="3" y="10" width="1" height="1" fill="#1a1430"/>
+      <rect x="4" y="10" width="1" height="1" fill="#1a1430"/>
+      <rect x="5" y="10" width="1" height="1" fill="#1a1430"/>
+      <rect x="3" y="11" width="1" height="1" fill="#1a1430"/>
+      <rect x="4" y="11" width="1" height="1" fill="#1a1430"/>
+      <rect x="5" y="11" width="1" height="1" fill="#1a1430"/>
+      <rect x="3" y="12" width="1" height="1" fill="#1a1430"/>
+      <rect x="4" y="12" width="1" height="1" fill="#1a1430"/>
+      <rect x="5" y="12" width="1" height="1" fill="#1a1430"/>
+      <rect x="3" y="13" width="1" height="1" fill="#1a1430"/>
+      <rect x="4" y="13" width="1" height="1" fill="#1a1430"/>
+      <rect x="5" y="13" width="1" height="1" fill="#1a1430"/>
+      <rect x="3" y="14" width="1" height="1" fill="#1a1430"/>
+      <rect x="4" y="14" width="1" height="1" fill="#1a1430"/>
+      <rect x="5" y="14" width="1" height="1" fill="#1a1430"/>
+      <rect x="3" y="15" width="1" height="1" fill="#1a1430"/>
+      <rect x="4" y="15" width="1" height="1" fill="#1a1430"/>
+      <rect x="5" y="15" width="1" height="1" fill="#1a1430"/>
+    </symbol>
+    <symbol id="face-tablo" viewBox="0 0 10 10">
+      <rect x="2" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="3" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="5" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="6" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="1" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="3" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="5" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="6" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="8" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="0" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="1" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="3" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="5" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="6" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="8" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="9" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="2" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="2" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="2" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="6" width="1" height="1" fill="#c0392b"/>
+      <rect x="5" y="6" width="1" height="1" fill="#c0392b"/>
+      <rect x="6" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="8" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="8" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="4" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="5" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="6" y="9" width="1" height="1" fill="#3a2f66"/>
+    </symbol>
+    <symbol id="face-mithra" viewBox="0 0 10 10">
+      <rect x="3" y="0" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="4" y="0" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="5" y="0" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="6" y="0" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="2" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="3" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="4" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="5" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="6" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="7" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="2" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="1" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="3" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="8" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="1" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="3" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="8" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="2" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="6" width="1" height="1" fill="#c0392b"/>
+      <rect x="5" y="6" width="1" height="1" fill="#c0392b"/>
+      <rect x="6" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="8" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="8" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="4" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="5" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="6" y="9" width="1" height="1" fill="#3a2f66"/>
+    </symbol>
+    <symbol id="face-tukutz" viewBox="0 0 10 10">
+      <rect x="1" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="8" y="0" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="1" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="3" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="4" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="5" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="6" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="7" y="1" width="1" height="1" fill="#2a2a3a"/>
+      <rect x="8" y="1" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="0" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="1" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="2" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="8" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="9" y="2" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="0" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="1" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="3" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="8" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="9" y="3" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="2" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="4" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="4" width="1" height="1" fill="#1b1b2a"/>
+      <rect x="7" y="4" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="2" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="5" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="2" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="6" width="1" height="1" fill="#c0392b"/>
+      <rect x="5" y="6" width="1" height="1" fill="#c0392b"/>
+      <rect x="6" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="7" y="6" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="6" y="7" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="4" y="8" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="5" y="8" width="1" height="1" fill="#f1c9a5"/>
+      <rect x="3" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="4" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="5" y="9" width="1" height="1" fill="#3a2f66"/>
+      <rect x="6" y="9" width="1" height="1" fill="#3a2f66"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="flash" id="flash" aria-hidden="true"></div>
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<header>
+  <h1><small id="player">High Skool</small>박규봉 잡기</h1>
+  <div class="stats">
+    <div class="stat"><div class="label">단계</div><div class="value" id="stageNo">1</div></div>
+    <div class="stat"><div class="label">맞힘</div><div class="value" id="score">0</div></div>
+    <div class="stat"><div class="label">콤보</div><div class="value" id="combo">0</div></div>
+    <div class="stat"><div class="label">남은 시간</div><div class="value" id="clock">30.0</div></div>
+  </div>
+</header>
+
+<main class="stage" id="stage" aria-label="화분"></main>
+
+<!-- 시작 -->
+<div class="panel pxbox" id="intro">
+  <p><span id="durationText"></span>초 동안 올라오는 박규봉을 최대한 많이 탭하세요</p>
+  <p class="sub" id="stageText"></p>
+  <div class="legend">
+    <div><img src="images/stick-rainbow.png" alt="">박규봉 +1</div>
+    <div><img src="images/stick-white.png" alt="">꺼진 봉 −1</div>
+  </div>
+  <p class="sub">단계가 오를수록 빨라지고 여러 개가 함께 올라옵니다. 연속으로 맞히면 콤보가 쌓이고, 빗나가면 끊깁니다.</p>
+  <form class="row" id="startForm">
+    <input type="text" id="nickname" placeholder="닉네임 (12자까지)" maxlength="12" required autocomplete="off" aria-label="닉네임">
+    <button class="primary" id="start" type="submit" disabled>시작</button>
+  </form>
+</div>
+
+<!-- 카운트다운 -->
+<div class="panel pxbox" id="ready" hidden><div class="countdown" id="count">3</div></div>
+
+<!-- 결과 -->
+<div class="panel pxbox" id="finish" hidden>
+  <div class="result">
+    <div class="who" id="finalName"></div>
+    <div class="big" id="finalScore"></div>
+    <div class="sub" id="finalDetail"></div>
+  </div>
+  <div class="row">
+    <button class="primary" id="copy" type="button">결과 복사</button>
+    <button class="primary ghost" id="retry" type="button">다시 도전</button>
+  </div>
+  <p class="sub" style="margin-top:16px">이 기기에서의 순위</p>
+  <table id="leaderboard" hidden>
+    <thead><tr><th>순위</th><th>닉네임</th><th class="num">맞힘</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<footer class="credit">MADE BY <b>FreeLove</b><br>FOR HIGHSKOOL · 2026</footer>
+
+<script>
+  // ========== 설정 ==========
+  const CONFIG = {
+    pots: 9,                  // 화분 수 (3, 6, 9). 멤버 3명이 순서대로 반복
+    // 단계별 난이도. 한 판 안에서 순서대로 진행되며, 각 단계 안에서도 [시작값 → 끝값]으로 점점 빨라집니다.
+    //   sec       단계 길이(초)
+    //   interval  등장 간격(ms) [시작, 끝]
+    //   upTime    올라와 있는 시간(ms) [시작, 끝]
+    //   maxUp     동시에 올라오는 최대 수
+    //   decoyRate 꺼진 봉(함정)이 나올 확률
+    stages: [
+      { sec: 10, interval: [900, 720], upTime: [1100, 950], maxUp: 1, decoyRate: 0.15 },
+      { sec: 10, interval: [650, 480], upTime: [900, 740],  maxUp: 2, decoyRate: 0.22 },
+      { sec: 10, interval: [440, 320], upTime: [680, 520],  maxUp: 3, decoyRate: 0.28 },
+    ],
+    stageHoldMs: 1300,        // 단계가 바뀔 때 안내 문구를 보여 주며 멈추는 시간(ms). 이 시간은 플레이 시간에서 빠지지 않음
+    scoreEndpoint: "",        // 기록 서버 주소(선택). 비우면 이 기기에만 저장
+  };
+  const TOTAL_SEC = CONFIG.stages.reduce((a, s) => a + s.sec, 0);
+
+  const $ = id => document.getElementById(id);
+    let nickname = "", slots = [], running = false;
+  let score = 0, hits = 0, misses = 0, decoyHits = 0, combo = 0, bestCombo = 0, shown = 0;
+  let startAt = 0, timers = [], stageIdx = 0, paused = false, pausedAt = 0;
+
+  // ========== 화분 만들기: 멤버 한 명당 하나 ==========
+  // images/face-<id>.png 가 있으면 그 그림을, 없으면 픽셀 아이콘을 화분에 붙입니다.
+  const MEMBERS = [
+    { id: "tablo", name: "TABLO" },
+    { id: "mithra", name: "MITHRA" },
+    { id: "tukutz", name: "TUKUTZ" },
+  ];
+  const SPRITES = { gyubong: "images/stick-rainbow.png", rock: "images/stick-white.png" };   // 맞혀야 할 것 / 함정
+  const stage = $("stage");
+  function buildPots() {
+    stage.style.setProperty("--pots", Math.min(CONFIG.pots, 3));
+    stage.innerHTML = ""; slots = [];
+    for (let i = 0; i < CONFIG.pots; i++) {
+      const m = MEMBERS[i % MEMBERS.length];
+      const slot = document.createElement("div"); slot.className = "slot"; slot.style.zIndex = Math.floor(i / 3) + 1;
+      const hole = document.createElement("div"); hole.className = "hole";
+      const sprite = document.createElement("div"); sprite.className = "sprite";
+      sprite.innerHTML = `<img src="${SPRITES.gyubong}" alt="">`;
+      hole.appendChild(sprite);
+      const face = document.createElement("div"); face.className = "face";
+      const img = document.createElement("img"); img.src = `images/face-${m.id}.png`; img.alt = "";
+      img.onerror = () => { face.innerHTML = `<svg><use href="#face-${m.id}"/></svg>`; };
+      face.appendChild(img);
+      const pot = document.createElement("div"); pot.className = "pot";
+      const rim = document.createElement("div"); rim.className = "rim";
+      const body = document.createElement("div"); body.className = "body"; body.appendChild(face);
+      pot.append(rim, body);
+      slot.append(hole, pot);
+      sprite.addEventListener("pointerdown", e => { e.stopPropagation(); whack(slot); });
+      slot.addEventListener("pointerdown", () => {
+        if (!running) return;
+        const s = slots.find(x => x.el === slot);
+        if (s.up && !slot.classList.contains("hit")) whack(slot); else miss(slot, "빗나감");
+      });
+      stage.appendChild(slot);
+      slots.push({ el: slot, sprite, type: null, up: false, hideTimer: null });
+    }
+  }
+
+  // ========== 진행 ==========
+  const lerp = (a, b, t) => a + (b - a) * t;
+  // 지금 몇 단계인지와 그 단계 안에서의 진행도(0~1)
+  function current() {
+    let t = (performance.now() - startAt) / 1000;
+    for (let i = 0; i < CONFIG.stages.length; i++) {
+      const st = CONFIG.stages[i];
+      if (t < st.sec || i === CONFIG.stages.length - 1) return { idx: i, stage: st, local: Math.min(1, Math.max(0, t / st.sec)) };
+      t -= st.sec;
+    }
+  }
+
+  function popOne() {
+    if (!running || paused) return;
+    const { stage, local } = current();
+    const free = slots.filter(s => !s.up);
+    if (free.length && slots.length - free.length < stage.maxUp) {
+      const s = free[Math.floor(Math.random() * free.length)];
+      s.type = Math.random() < stage.decoyRate ? "rock" : "gyubong";
+      s.sprite.querySelector("img").src = SPRITES[s.type];
+      s.el.classList.remove("hit", "down"); s.el.classList.add("up"); s.up = true;
+      if (s.type === "gyubong") shown++;
+      s.hideTimer = setTimeout(() => hide(s), lerp(stage.upTime[0], stage.upTime[1], local));
+    }
+    timers.push(setTimeout(popOne, lerp(stage.interval[0], stage.interval[1], local)));
+  }
+  function showStage(n) {
+    $("stageNo").textContent = n;
+    const t = $("toast");
+    t.innerHTML = `${n}단계<small>${n === CONFIG.stages.length ? "마지막 · 전력 질주!" : "더 빨라집니다"}</small>`;
+    t.classList.remove("on"); void t.offsetWidth; t.classList.add("on");
+  }
+  function hide(s, silent) {
+    clearTimeout(s.hideTimer);
+    s.el.classList.add("down"); s.el.classList.remove("up"); s.up = false;
+    // 박규봉을 놓치면 콤보 끊김 (단계 전환으로 내릴 때는 유지)
+    if (!silent && s.type === "gyubong" && !s.el.classList.contains("hit")) { combo = 0; $("combo").textContent = 0; }
+  }
+
+  // ========== 단계 전환 멈춤 ==========
+  function freeze() {                       // 등장을 멈추고 올라온 것은 내림. 콤보는 유지
+    if (paused) return;
+    paused = true; pausedAt = performance.now();
+    timers.forEach(clearTimeout); timers = [];
+    slots.forEach(s => { if (s.up) hide(s, true); });
+  }
+  function thaw() {                         // 멈춘 만큼 시작 시각을 밀어 남은 시간을 그대로 이어감
+    if (!paused) return;
+    startAt += performance.now() - pausedAt;
+    paused = false;
+    popOne(); tick();
+  }
+
+
+  function whack(slotEl) {
+    const s = slots.find(x => x.el === slotEl);
+    if (!running || !s.up || s.el.classList.contains("hit")) return;
+    s.el.classList.add("hit");
+    if (s.type === "gyubong") {
+      hits++; combo++; bestCombo = Math.max(bestCombo, combo);
+      score++;
+      pop(s.el, combo >= 5 ? `+1 ×${combo}` : "+1");
+    } else {
+      decoyHits++; combo = 0; score = Math.max(0, score - 1);
+      pop(s.el, "−1", true); $("flash").classList.remove("on"); void $("flash").offsetWidth; $("flash").classList.add("on");
+    }
+    $("score").textContent = score; $("combo").textContent = combo;
+    hide(s);
+  }
+  function miss(slotEl, label) {
+    misses++; combo = 0; $("combo").textContent = 0;
+    pop(slotEl, label, true);
+  }
+  function pop(el, text, bad) {
+    const p = document.createElement("div"); p.className = "pop" + (bad ? " bad" : ""); p.textContent = text;
+    el.appendChild(p); setTimeout(() => p.remove(), 650);
+  }
+
+  function tick() {
+    if (!running || paused) return;
+    const left = Math.max(0, TOTAL_SEC - (performance.now() - startAt) / 1000);
+    const { idx } = current();
+    if (idx !== stageIdx) {
+      stageIdx = idx; showStage(idx + 1); freeze();
+      setTimeout(thaw, CONFIG.stageHoldMs);
+      return;
+    }
+    $("clock").textContent = left.toFixed(1);
+    $("clock").classList.toggle("warn", left <= 5);
+    if (left <= 0) return finish();
+    requestAnimationFrame(tick);
+  }
+
+  // ========== 시작 / 종료 ==========
+  $("durationText").textContent = TOTAL_SEC;
+  $("stageText").textContent = `총 ${CONFIG.stages.length}단계 · ${CONFIG.stages.map((s, i) => `${i + 1}단계 ${s.sec}초`).join(" → ")}`;
+  $("clock").textContent = TOTAL_SEC.toFixed(1);
+  $("nickname").addEventListener("input", () => { $("start").disabled = !$("nickname").value.trim(); });
+  $("startForm").addEventListener("submit", e => {
+    e.preventDefault();
+    nickname = $("nickname").value.trim().slice(0, 12);
+    if (!nickname) return;
+    $("player").textContent = nickname; $("intro").hidden = true;
+    countdown(3);
+  });
+  function countdown(n) {
+    $("ready").hidden = false; $("count").textContent = n || "GO!";
+    if (n === 0) return setTimeout(() => { $("ready").hidden = true; begin(); }, 500);
+    setTimeout(() => countdown(n - 1), 800);
+  }
+  function begin() {
+    score = hits = misses = decoyHits = combo = bestCombo = shown = 0; stageIdx = 0;
+    $("score").textContent = 0; $("combo").textContent = 0; $("stageNo").textContent = 1;
+    running = true; paused = false; startAt = performance.now();
+    popOne(); tick();
+  }
+  async function finish() {
+    running = false; paused = false;
+    timers.forEach(clearTimeout); slots.forEach(s => hide(s, true));
+    $("clock").textContent = "0.0";
+    const accuracy = hits + misses + decoyHits ? Math.round(hits / (hits + misses + decoyHits) * 100) : 0;
+    $("finalName").textContent = nickname;
+    $("finalScore").textContent = `${score}개`;
+    $("finalDetail").textContent = `${CONFIG.stages.length}단계 완주 · 박규봉 ${hits}/${shown} 적중 · 꺼진 봉 ${decoyHits}회 · 빗나감 ${misses}회 · 최대 콤보 ${bestCombo} · 정확도 ${accuracy}%`;
+    $("finish").hidden = false;
+    const entry = { nickname, score, hits, shown, decoyHits, misses, bestCombo, accuracy, at: new Date().toISOString() };
+    try { renderLeaderboard(await submitScore(entry)); } catch {}
+  }
+
+  $("copy").addEventListener("click", async () => {
+    const text = `[박규봉 잡기] ${nickname} · ${score}개 (최대 콤보 ${bestCombo})`;
+    try { await navigator.clipboard.writeText(text); $("copy").textContent = "복사됨"; }
+    catch { prompt("아래 내용을 복사하세요", text); }
+  });
+  $("retry").addEventListener("click", () => location.reload());
+
+  async function submitScore(entry) {
+    if (CONFIG.scoreEndpoint) {
+      const res = await fetch(CONFIG.scoreEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error("server");
+      return (await res.json()).top;
+    }
+    let rows = [];
+    try { rows = JSON.parse(localStorage.getItem("eh-whack-v2") || "[]"); } catch {}
+    rows.push(entry);
+    rows.sort((a, b) => b.score - a.score || b.bestCombo - a.bestCombo);
+    rows = rows.slice(0, 10);
+    try { localStorage.setItem("eh-whack-v2", JSON.stringify(rows)); } catch {}
+    return rows;
+  }
+  function renderLeaderboard(rows) {
+    const tbody = $("leaderboard").querySelector("tbody");
+    tbody.innerHTML = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${String(r.nickname).replace(/[<>&]/g, "")}</td><td class="num">${r.score}</td></tr>`).join("");
+    $("leaderboard").hidden = false;
+  }
+
+  buildPots();
+</script>
+</body>
+</html>

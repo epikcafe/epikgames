@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Epik High 짝 맞추기</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=DotGothic16&display=swap">
+<style>
+  :root {
+    --hall: #0a0714; --hall-2: #1a1030;
+    --ink: #f4f1ff; --muted: #9a94c2;
+    --panel: #130d26; --line: #3a2f66;
+    --accent: #ffd43b; --accent-dark: #c99a00; --accent-ink: #1b1b2a; --match: #5ee87a;
+    --beam: rgba(255, 212, 59, 0.16); --beam-2: rgba(170, 120, 255, 0.16);
+    --stage-top: #3a2f66; --stage: #241b47; --stage-lip: #4b3d85; --floor: #0b0916;
+    --card-back: #1b1340; --card-back-dot: #2a1f5e; --card-front: #f6f3ea; --card-front-ink: #1b1b2a;
+    --px: 4px;   /* 픽셀 한 칸 */
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; color: var(--ink);
+    font-family: "DotGothic16", "Press Start 2P", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, monospace;
+    background: var(--hall);
+    display: flex; flex-direction: column; align-items: center;
+    padding-inline: 16px; padding-block: 24px; box-sizing: border-box;
+    position: relative; overflow-x: hidden;
+    image-rendering: pixelated;
+  }
+  /* 스캔라인 */
+  body::after { content: ""; position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 4px); }
+
+  /* ---- 픽셀 테두리: 네 방향 그림자로 모서리가 한 칸 깎인 선 ---- */
+  .pxbox { --border: var(--line); border: 0;
+    box-shadow: 0 calc(var(--px) * -1) 0 0 var(--border), 0 var(--px) 0 0 var(--border),
+                calc(var(--px) * -1) 0 0 0 var(--border), var(--px) 0 0 0 var(--border); }
+
+  header, .panel { position: relative; z-index: 1; }
+  header { margin-top: 9vh; padding: 10px 14px; background: rgba(10, 7, 20, 0.72); box-shadow: 0 0 0 var(--px) rgba(255,255,255,0.08); text-shadow: 2px 2px 0 #000; }
+  .stat .label { white-space: nowrap; }
+  .panel { background: rgba(19, 13, 38, 0.92); }
+  header { width: 100%; max-width: 640px; display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 22px; }
+  h1 { margin: 0; font-family: "Press Start 2P", "DotGothic16", monospace; font-size: 18px; line-height: 1.4; text-shadow: 3px 3px 0 var(--accent-dark); }
+  h1 small { display: block; font-family: "DotGothic16", monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; text-shadow: none; margin-bottom: 4px; }
+  .stats { display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+  .stat { text-align: right; }
+  .stat .label { font-size: 12px; letter-spacing: 0.15em; color: var(--muted); }
+  .stat .value { font-family: "Press Start 2P", monospace; font-size: 16px; color: var(--accent); margin-top: 4px; }
+  @media (max-width: 480px) {
+    header { margin-top: 3vh; flex-direction: column; align-items: stretch; gap: 10px; }
+    h1 { font-size: 15px; }
+    .stats { justify-content: space-between; }
+    .stat { text-align: center; }
+  }
+
+  /* ---- 배경: 픽셀 콘서트장 이미지 (images/bg.png) ---- */
+  .backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: url("images/bg.png") center top / cover no-repeat var(--hall); image-rendering: pixelated; }
+
+  /* ---- 카드판: 이미지의 빈 무대 자리에 올림 ---- */
+  .stage { position: relative; z-index: 1; width: 100%; margin-top: 4vh; transition: max-width .3s steps(6);
+    /* 판이 화면 높이(헤더·여백 제외) 안에 들어오도록 너비를 제한 */
+    max-width: min(var(--stage-w, 520px), calc((100vh - 230px) / var(--ratio, 1.34))); }
+  #board.square .card { aspect-ratio: 1 / 1; }
+  #board.square .face.front { grid-template-rows: 1fr; padding: var(--px); }
+  #board.square .face.front img { aspect-ratio: auto; width: 100%; height: 100%; object-fit: cover; }
+  #board.square .face.front .title { font-size: clamp(6px, 1vw, 11px); line-height: 1.2; }
+  #board.square .face.front .title span { font-size: 0.6em; margin-top: 3px; }
+  .card.free { cursor: default; }
+  .card.free .face { background: #000; box-shadow: inset 0 0 0 var(--px) #2a2a3a, 4px 4px 0 0 #000; }
+  .card.free .face img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+  .card.free .mark { font-family: "Press Start 2P", monospace; font-size: clamp(8px, 2vw, 12px); color: #fff; text-align: center; line-height: 1.6; }
+  .deck { background: rgba(10, 7, 20, 0.55); --border: rgba(255, 255, 255, 0.18); padding: 16px; box-sizing: border-box; margin: var(--px); backdrop-filter: blur(1px); }
+  .stage .spot { height: 10px; margin: 8px 18% 0; background: repeating-linear-gradient(90deg, rgba(255,212,59,0.5) 0 8px, transparent 8px 16px); }
+  @media (max-width: 480px) { .stage { max-width: 100%; margin-top: 2vh; } .deck { padding: 10px; } }
+
+  #board { width: 100%; display: grid; gap: clamp(4px, calc(40px / var(--cols, 4)), 12px); grid-template-columns: repeat(var(--cols, 4), 1fr); }
+  .card { aspect-ratio: 3 / 4; max-width: 100%; perspective: 700px; cursor: pointer; border: 0; background: none; padding: 0; }
+  .card .inner { position: relative; width: 100%; height: 100%; transition: transform .3s steps(5); transform-style: preserve-3d; }
+  .card.open .inner, .card.matched .inner { transform: rotateY(180deg); }
+  .face { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; display: grid; place-items: center; box-shadow: 4px 4px 0 0 #000; }
+  /* 뒷면: images/back.png (2:3). 없으면 글자 마크 */
+  .face.back { background: #16113a; }
+  .face.back img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+  .face.back .mark { font-family: "Press Start 2P", monospace; font-size: clamp(8px, 2vw, 12px); color: var(--ink); text-align: center; line-height: 1.6; text-shadow: 2px 2px 0 #000; }
+  .face.back .mark span { display: block; font-family: "DotGothic16", monospace; font-size: 0.9em; color: var(--accent); }
+  /* 앞면: 보라 픽셀 테두리 안에 정사각 커버 + 제목 */
+  .face.front { background: #1a1540; color: var(--ink); transform: rotateY(180deg); box-shadow: inset 0 0 0 var(--px) #8a3cff, inset 0 0 0 calc(var(--px) * 2) #2ee6ff, 4px 4px 0 0 #000; padding: calc(var(--px) * 2); box-sizing: border-box; grid-template-rows: auto 1fr; align-content: start; gap: 0; }
+  .face.front img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; image-rendering: pixelated; }
+  .face.front .title { align-self: center; padding: 2px; text-align: center; font-size: clamp(8px, calc(46px / var(--cols, 4)), 13px); overflow: hidden; line-height: 1.3; text-wrap: balance; }
+  .face.front .title span { display: block; font-family: "Press Start 2P", monospace; font-size: 0.7em; color: #2ee6ff; margin-top: 6px; }
+  .card.matched .face.front { box-shadow: inset 0 0 0 var(--px) var(--match), inset 0 0 0 calc(var(--px) * 2) #1a1540, 4px 4px 0 0 #000; }
+  .card:focus-visible { outline: var(--px) solid var(--accent); outline-offset: 2px; }
+
+  .panel { margin-top: 28px; text-align: center; background: var(--panel); padding: 20px 24px; max-width: 640px; width: 100%; box-sizing: border-box; }
+  .panel p { margin: 0 0 14px; font-size: 16px; line-height: 1.6; }
+  .panel .sub { font-size: 14px; color: var(--muted); }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  input[type="text"] { font: inherit; font-size: 16px; padding: 10px 14px; border: var(--px) solid var(--line); background: #0a0714; color: var(--ink); min-width: 0; width: 200px; }
+  input[type="text"]:focus-visible { outline: var(--px) solid var(--accent); outline-offset: 2px; }
+  button.primary { font-family: "Press Start 2P", "DotGothic16", monospace; font-size: 12px; background: var(--accent); color: var(--accent-ink); border: 0; padding: 14px 22px; cursor: pointer; box-shadow: inset -4px -4px 0 0 var(--accent-dark), 4px 4px 0 0 #000; }
+  button.primary:active { box-shadow: inset 4px 4px 0 0 var(--accent-dark); transform: translate(2px, 2px); }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  button.primary:focus-visible { outline: var(--px) solid var(--ink); outline-offset: 2px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 14px; }
+  th, td { padding: 8px; text-align: left; border-top: 2px dashed var(--line); }
+  th { font-size: 12px; letter-spacing: 0.15em; color: var(--muted); border-top: 0; }
+  td.num { text-align: right; font-family: "Press Start 2P", monospace; font-size: 11px; color: var(--accent); }
+  .result { padding: 12px 0 18px; }
+  .result .who { font-size: 14px; color: var(--muted); letter-spacing: 0.1em; }
+  .result .big { font-family: "Press Start 2P", monospace; font-size: clamp(22px, 5vw, 36px); color: var(--accent); text-shadow: 3px 3px 0 var(--accent-dark); margin: 10px 0 8px; }
+  button.primary.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 var(--px) var(--line); }
+  footer.credit { position: relative; z-index: 1; margin-top: 28px; padding: 10px 14px; text-align: center;
+    font-family: "Press Start 2P", monospace; font-size: 10px; letter-spacing: 0.15em; line-height: 1.8; color: var(--muted); text-shadow: 2px 2px 0 #000; }
+  footer.credit b { color: var(--accent); font-weight: normal; }
+  @media (prefers-reduced-motion: reduce) { .card .inner { transition: none; } }
+</style>
+</head>
+<body>
+
+
+<div class="backdrop" aria-hidden="true"></div>
+
+<header>
+  <h1><small id="player">High Skool</small>Epik High 짝 맞추기</h1>
+  <div class="stats">
+    <div class="stat"><div class="label">라운드</div><div class="value" id="level">2×2</div></div>
+    <div class="stat"><div class="label">시도</div><div class="value" id="moves">0</div></div>
+    <div class="stat"><div class="label">시간</div><div class="value" id="clock">0.0</div></div>
+  </div>
+</header>
+
+<main class="stage">
+  <div class="deck pxbox"><div id="board" aria-label="카드판"></div></div>
+  <div class="spot" aria-hidden="true"></div>
+</main>
+
+<!-- 시작 전 -->
+<div class="panel pxbox" id="intro">
+  <p>총 <span id="totalLevels"></span>라운드 · 2×2부터 6×6까지</p>
+  <p class="sub">첫 카드를 뒤집는 순간부터 시간이 흐릅니다. 틀린 횟수는 기록에 1초씩 더해집니다.</p>
+  <p class="sub" id="poolNote" hidden></p>
+  <form class="row" id="startForm">
+    <input type="text" id="nickname" placeholder="닉네임 (12자까지)" maxlength="12" required autocomplete="off" aria-label="닉네임">
+    <button class="primary" id="start" type="submit" disabled>시작</button>
+  </form>
+</div>
+
+<!-- 단계 클리어 -->
+<div class="panel pxbox" id="cleared" hidden>
+  <p id="message"></p>
+  <button class="primary" id="next">다음 라운드</button>
+</div>
+
+<!-- 최종 결과와 기록 등록 -->
+<div class="panel pxbox" id="finish" hidden>
+  <div class="result">
+    <div class="who" id="finalName"></div>
+    <div class="big" id="finalScore"></div>
+    <div class="sub" id="finalDetail"></div>
+  </div>
+  <div class="row">
+    <button class="primary" id="copy" type="button">결과 복사</button>
+    <button class="primary ghost" id="retry" type="button">다시 도전</button>
+  </div>
+  <p class="sub" id="submitNote" hidden></p>
+  <p class="sub" style="margin-top:16px">이 기기에서의 순위</p>
+  <table id="leaderboard" hidden>
+    <thead><tr><th>순위</th><th>닉네임</th><th class="num">기록</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<footer class="credit">MADE BY <b>FreeLove</b><br>FOR HIGHSKOOL · 2026</footer>
+
+<script>
+  // ========== 이벤트 설정 ==========
+  const CONFIG = {
+    grids: [2, 4, 6],         // 라운드별 격자 (2×2 → 4×4 → 6×6). n×n은 카드 n²/2종 필요. 홀수를 넣으면 가운데 칸은 로고 타일
+    missPenaltySec: 1,        // 틀릴 때마다 더해지는 초
+    // 기록 서버 주소. 비워 두면 이 브라우저에만 저장(테스트용).
+    // 실제 이벤트에선 POST {nickname, timeMs, misses} 를 받는 주소를 넣으세요.
+    scoreEndpoint: "",
+  };
+
+  // 앨범 목록 (21종). images/ 폴더의 256px 픽셀 커버를 사용합니다.
+  const ALBUMS = [
+    { title: "Map of the Human Soul", year: 2003, image: "01-map-of-the-human-soul.png" },
+    { title: "High Society", year: 2004, image: "02-high-society.png" },
+    { title: "Swan Songs", year: 2005, image: "03-swan-songs.png" },
+    { title: "Black Swan Songs", year: 2006, image: "04-black-swan-songs-repackage.png" },
+    { title: "Remapping the Human Soul", year: 2007, image: "05-remapping-the-human-soul.png" },
+    { title: "Remixing the Human Soul", year: 2007, image: "09-remixing-the-human-soul-remixed-by-planet-shiver.png" },
+    { title: "Pieces, Part One", year: 2008, image: "06-pieces-pt-1.png" },
+    { title: "Lovescream", year: 2008, image: "07-lovescream.png" },
+    { title: "魂: Map the Soul", year: 2009, image: "08-map-the-soul.png" },
+    { title: "[e]", year: 2009, image: "10-e.png" },
+    { title: "Epilogue", year: 2010, image: "11-epilogue.png" },
+    { title: "99", year: 2012, image: "12-99.png" },
+    { title: "Shoebox", year: 2014, image: "13-shoebox.png" },
+    { title: "We've Done Something Wonderful", year: 2017, image: "14-we-ve-done-something-wonderful.png" },
+    { title: "sleepless in __________", year: 2019, image: "15-sleepless-in.png" },
+    { title: "Epik High Is Here 上", year: 2021, image: "16-epik-high-is-here-pt-1.png" },
+    { title: "Epik High Is Here 下", year: 2022, image: "17-epik-high-is-here-pt-2.png" },
+    { title: "Strawberry", year: 2023, image: "18-strawberry-ep.png" },
+    { title: "Screen Time", year: 2023, image: "19-screen-time-ep.png" },
+    { title: "Pump", year: 2024, image: "20-pump.png" },
+    { title: "EPIKISM (feat. Crush)", year: 2026, image: "21-epikism-feat-crush-single.png" },
+  ];
+  const BACK = "images/back.png";
+  const CENTER_TILE = "images/logo-plain.png";   // 홀수 격자 가운데 고정 타일
+
+  // ========== 상태 ==========
+  let level = 1, moves = 0, misses = 0, opened = [], matchedCount = 0, locked = true;
+  let startedAt = null, elapsedMs = 0, clockTimer = null;
+  const $ = id => document.getElementById(id);
+  const board = $("board");
+
+  // 설정된 격자가 카드 종류보다 크면, 짝수를 유지하며 가능한 최대 격자로 내림 (n×n 격자는 n²/2 종류 필요)
+  function gridFor(level) {
+    let n = CONFIG.grids[level - 1];
+    while (n > 2 && Math.floor(n * n / 2) > ALBUMS.length) n -= 2;
+    return n;
+  }
+  function pairsFor(level) { const n = gridFor(level); return Math.floor(n * n / 2); }
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  }
+  function fmt(ms) { return (ms / 1000).toFixed(1) + "초"; }
+
+  // ========== 타이머 ==========
+  function startClock() {
+    if (startedAt !== null) return;
+    startedAt = performance.now();
+    clockTimer = setInterval(() => { $("clock").textContent = ((elapsedMs + performance.now() - startedAt) / 1000).toFixed(1); }, 100);
+  }
+  function pauseClock() {
+    if (startedAt === null) return;
+    elapsedMs += performance.now() - startedAt;
+    startedAt = null;
+    clearInterval(clockTimer);
+    $("clock").textContent = (elapsedMs / 1000).toFixed(1);
+  }
+
+  // ========== 카드 ==========
+  function imgOrText(src, fallbackHTML, cls) {
+    const wrap = document.createElement("div");
+    wrap.className = cls;
+    const img = document.createElement("img");
+    img.src = src; img.alt = "";
+    img.onerror = () => { wrap.innerHTML = fallbackHTML; };
+    wrap.appendChild(img);
+    return wrap;
+  }
+
+  function startLevel() {
+    const n = gridFor(level), pairs = pairsFor(level);
+    const deck = shuffle(shuffle([...ALBUMS]).slice(0, pairs).flatMap(a => [a, a]));   // 한 라운드 안에서는 앨범 중복 없음
+    const centerIndex = n % 2 ? (n * n - 1) / 2 : -1;
+    opened = []; matchedCount = 0; locked = false;
+    $("level").textContent = `${n}×${n}`;
+    $("cleared").hidden = true;
+    board.style.setProperty("--cols", n);
+    const stage = document.querySelector(".stage");
+    stage.style.setProperty("--stage-w", Math.min(n * 110 + 80, 1000) + "px");   // 2→300, 4→520, 6→740
+    stage.style.setProperty("--ratio", n >= 8 ? 1 : 1.34);                          // 판 높이/너비 비율 (화면 높이에 맞출 때 사용)
+    board.classList.toggle("square", n >= 8);
+    board.innerHTML = "";
+    let k = 0;
+    for (let i = 0; i < n * n; i++) {
+      if (i === centerIndex) {
+        const tile = document.createElement("div");
+        tile.className = "card free"; tile.setAttribute("aria-hidden", "true");
+        tile.appendChild(imgOrText(CENTER_TILE, `<div class="mark">EPIK<br>HIGH</div>`, "face"));
+        board.appendChild(tile);
+        continue;
+      }
+      const album = deck[k++];
+      const card = document.createElement("button");
+      card.className = "card"; card.dataset.key = album.title; card.setAttribute("aria-label", "카드");
+      const inner = document.createElement("div"); inner.className = "inner";
+      inner.appendChild(imgOrText(BACK, `<div class="mark">EPIK<br>HIGH<span>since 2003</span></div>`, "face back"));
+      inner.appendChild(imgOrText("images/" + album.image, `<div class="title">${album.title}<span>${album.year}</span></div>`, "face front"));
+      card.appendChild(inner);
+      card.addEventListener("click", () => flip(card));
+      board.appendChild(card);
+    }
+  }
+
+  function flip(card) {
+    if (locked || card.classList.contains("open") || card.classList.contains("matched")) return;
+    startClock();
+    card.classList.add("open");
+    opened.push(card);
+    if (opened.length < 2) return;
+
+    moves++; $("moves").textContent = moves;
+    const [a, b] = opened;
+    if (a.dataset.key === b.dataset.key) {
+      a.classList.replace("open", "matched"); b.classList.replace("open", "matched");
+      opened = []; matchedCount++;
+      if (matchedCount === pairsFor(level)) levelClear();
+    } else {
+      misses++; locked = true;
+      setTimeout(() => { a.classList.remove("open"); b.classList.remove("open"); opened = []; locked = false; }, 800);
+    }
+  }
+
+  function levelClear() {
+    pauseClock(); locked = true;
+    if (level >= CONFIG.grids.length) return finish();
+    $("message").textContent = `라운드 ${level} (${gridFor(level)}×${gridFor(level)}) 클리어 · 누적 ${fmt(elapsedMs)}`;
+    $("cleared").hidden = false;
+  }
+
+  // ========== 최종 기록 ==========
+  function finalScoreMs() { return Math.round(elapsedMs + misses * CONFIG.missPenaltySec * 1000); }
+
+  let nickname = "";
+
+  async function finish() {
+    const score = finalScoreMs();
+    $("finalName").textContent = nickname;
+    $("finalScore").textContent = fmt(score);
+    $("finalDetail").textContent = `플레이 ${fmt(elapsedMs)} + 실수 ${misses}회 × ${CONFIG.missPenaltySec}초`;
+    $("finish").hidden = false;
+    const entry = { nickname, timeMs: score, misses, levels: CONFIG.grids.length, at: new Date().toISOString() };
+    try {
+      renderLeaderboard(await submitScore(entry));
+    } catch (err) {
+      $("submitNote").textContent = "기록 저장에 실패했습니다. 결과를 복사해 두세요.";
+      $("submitNote").hidden = false;
+    }
+  }
+
+  $("copy").addEventListener("click", async () => {
+    const text = `[Epik High 짝 맞추기] ${nickname} · ${fmt(finalScoreMs())} (실수 ${misses}회)`;
+    try { await navigator.clipboard.writeText(text); $("copy").textContent = "복사됨"; }
+    catch { prompt("아래 내용을 복사하세요", text); }
+  });
+  $("retry").addEventListener("click", () => location.reload());
+
+  // 서버가 있으면 서버로, 없으면 이 브라우저에만 저장
+  async function submitScore(entry) {
+    if (CONFIG.scoreEndpoint) {
+      const res = await fetch(CONFIG.scoreEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) });
+      if (!res.ok) throw new Error("server");
+      return (await res.json()).top;          // 서버는 { top: [{nickname, timeMs}, ...] } 를 돌려준다고 가정
+    }
+    let rows = [];
+    try { rows = JSON.parse(localStorage.getItem("eh-scores") || "[]"); } catch {}
+    rows.push(entry);
+    rows.sort((a, b) => a.timeMs - b.timeMs);
+    rows = rows.slice(0, 10);
+    try { localStorage.setItem("eh-scores", JSON.stringify(rows)); } catch {}
+    return rows;
+  }
+
+  function renderLeaderboard(rows) {
+    const tbody = $("leaderboard").querySelector("tbody");
+    tbody.innerHTML = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.nickname.replace(/[<>&]/g, "")}</td><td class="num">${fmt(r.timeMs)}</td></tr>`).join("");
+    $("leaderboard").hidden = false;
+  }
+
+  // ========== 시작 ==========
+  $("totalLevels").textContent = CONFIG.grids.length;
+  (function poolCheck() {
+    const short = CONFIG.grids.filter(n => Math.floor(n * n / 2) > ALBUMS.length);
+    if (!short.length) return;
+    const need = short.map(n => `${n}×${n}은 ${n * n / 2}종`).join(", ");
+    $("poolNote").textContent = `카드 종류 ${ALBUMS.length}개 · ${need} 필요 → 해당 라운드는 ${gridFor(CONFIG.grids.indexOf(short[0]) + 1)}×${gridFor(CONFIG.grids.indexOf(short[0]) + 1)}로 진행`;
+    $("poolNote").hidden = false;
+  })();
+  $("nickname").addEventListener("input", () => { $("start").disabled = !$("nickname").value.trim(); });
+  $("startForm").addEventListener("submit", e => {
+    e.preventDefault();
+    nickname = $("nickname").value.trim().slice(0, 12);
+    if (!nickname) return;
+    $("player").textContent = nickname;
+    $("intro").hidden = true;
+    startLevel();
+  });
+  $("next").addEventListener("click", () => { level++; startLevel(); });
+
+  startLevel(); locked = true;   // 시작 버튼 누르기 전까지 카드판은 보이되 잠김
+</script>
+</body>
+</html>
